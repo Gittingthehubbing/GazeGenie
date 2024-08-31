@@ -1,0 +1,25 @@
+datasets
+einops
+matplotlib
+numpy
+pandas
+PyYAML
+seaborn
+tqdm
+transformers==4.*
+tensorboard
+torchmetrics
+pytorch-lightning
+scikit-learn
+plotly
+lovely-tensors
+timm
+openpyxl
+torch==2.*
+pydantic==1.10
+streamlit >= 1.35
+pycairo
+eyekit
+stqdm
+jellyfish
+icecream

@@ -1,0 +1,88 @@
+#### Column names for Fixation Dataframe
+Some features were adapted from the popEye R package ([github](https://github.com/sascha2schroeder/popEye))
+The if the column depend on a line assignment then a _ALGORITHM_NAME will be at the end of the name.
+- subject: Subject name or ID
+- trial_id: Trial ID
+- item: Item ID
+- condition: Condition (if applicable)
+- fixation_number: Index of fixation
+- start_uncorrected: Starting timestamp of event as recorded by EyeLink
+- stop_uncorrected: End timestamp of event as recorded by EyeLink
+- start_time: Start time (in ms since start of the trial)
+- end_time: End time (in ms since start of the trial)
+- corrected_start_time: Start time of the event measured from to the first fixation
+- corrected_end_time: End time of the event measured from to the first fixation
+- x: Raw x position (in pixel)
+- y: Raw y position (in pixel)
+- pupil_size: Size of pupil as recorded by EyeLink
+- distance_in_char_widths: Horizontal distance to previous fixation in number of character widths
+- y_ALGORITHM: Corrected y position (in pixel), i.e. after line assignment
+- y_ALGORITHM_correction: Difference between corrected and raw y position (in pixel)
+- duration: Duration (in ms)
+- sac_in: Incoming saccade length (in letters)
+- sac_out: Outgoing saccade length (in letters)
+- type: Whether fixation is an outlier fixation ("out"), i.e. located outside the text area (see assign.outlier and assign.outlier.dist arguments)
+- blink: Whether a blink occured directly before or after the fixation
+- run: Number of run the fixation was assigned to (if applicable)
+- linerun: Number of run on the line the fixation was assigned to (if applicable)
+- line_num: Number of line the fixation was assigned to
+- line_change: Difference between the line of the current and the last fixation
+- line_let: Number of letter on line
+- line_word: Number of word on line
+- letternum: Number of letter in trial
+- letter: Name of Letter
+- on_word_number: Number of word in trial
+- on_word: Name of Word
+- ianum: Number of IA in trial
+- ia: Name of IA
+- on_sentence_num: Number of sentence in trial
+- on_sentence: Sentence text
+- sentence_nwords: Number of words in sentence
+- trial: Name trial (abbreviated)
+- trial_nwords: Number of words in trial
+- word_fix: Number of fixation on word
+- word_run: Number of run the word the word was read
+- word_runid: Number of the word run, the fixation belongs to
+- word_run_fix: Number of fixation within the run
+- word_firstskip: Whether word has been skipped during first-pass reading
+- word_refix: Whether word has been refixated with current fixation
+- word_launch: Launch site distance from the beginning of the word
+- word_land: Landing position with word
+- word_cland: Centered landing position (e.g., calculated from the center of the word)
+- word_reg_out: Whether a regression was made out of the word
+- word_reg_in: Whether a regression was made into the word
+- sentence_word: Number of word in sentence
+- sentence_fix: Number of fixation on sentence
+- sentence_run: Number of run on sentence
+- sentence_runid: Number of the sentence run, the fixation belongs to
+- sentence_firstskip: Whether the sentence has been skipped during first-pass reading
+- sentence_refix: Whether sentence was refixated wither current fixation
+- sentence_reg_out: Whether a regression was made out the sentence
+- sentence_reg_in: Whether a regression was made into the sentence
+- sac_in_ALGORITHM_NAME: Incoming saccade length (in letters)
+- sac_out_ALGORITHM_NAME: Outgoing saccade length (in letters)
+- blink_before: Whether a blink was recorded before the event
+- blink_after: Whether a blink was recorded after the event
+- blink: Whether a blink was recorded before or after the event
+- duration: Duration of the event
+- line_change_ALGORITHM_NAME: Difference between the line of the current and the previous fixation
+- on_word_number_ALGORITHM_NAME: Index of word that the fixation has been assigned to
+- num_words_in_sentence_ALGORITHM_NAME: Number of words in sentence to which fixation has been assigned
+- word_land_ALGORITHM_NAME: Landing position of fixation within word in number of letters
+- line_let_ALGORITHM_NAME: Index of letter on line
+- line_let_from_last_letter_ALGORITHM_NAME: Letter number on line counted from last letter of line
+- line_word_ALGORITHM_NAME: Number of word on line
+- sentence_word_ALGORITHM_NAME: Number of word in sentence
+- is_far_out_of_text_uncorrected: Indicates if a fixation is far outside the stimulus area as determined by the vertical and horizontal margins
+- line_let_previous_ALGORITHM_NAME: Index of letter on line for previous fixations
+- line_let_next_ALGORITHM_NAME: Index of letter on line for next fixations
+- sentence_reg_out_to_ALGORITHM_NAME: Whether a regression was made out of the sentence
+- sentence_reg_in_from_ALGORITHM_NAME: Whether a regression was made into the sentence
+- word_reg_in_from_ALGORITHM_NAME: Whether a regression was made out of the word
+- word_reg_out_to_ALGORITHM_NAME: Whether a regression was made into the word
+- word_firstskip_ALGORITHM_NAME: Whether word has been skipped during first-pass reading
+- sentence_firstskip_ALGORITHM_NAME: Whether the sentence has been skipped during first-pass reading
+- sentence_runid_ALGORITHM_NAME: Number of the sentence run, the fixation belongs to
+- sentence_run_fix_ALGORITHM_NAME: 
+- angle_incoming: Angle based on position of previous fixation
+- angle_outgoing: Angle based on position of next fixation

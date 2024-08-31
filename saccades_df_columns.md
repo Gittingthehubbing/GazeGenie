@@ -1,0 +1,38 @@
+#### Column names for Saccades Dataframe
+Some features were adapted from the popEye R package ([github](https://github.com/sascha2schroeder/popEye))
+The if the column depend on a line assignment then a _ALGORITHM_NAME will be at the end of the name.
+- subject: Subject name or ID (derived from filename)
+- trial_id: Trial ID
+- item: Item ID
+- condition: Condition (if applicable)
+- num: Saccade number
+- start_time: Start time (in ms since start of the trial)
+- end_time: End time (in ms since start of the trial)
+- xs: Raw x start position (in pixel)
+- ys: Raw y start position (in pixel)
+- xe: Raw x end position (in pixel)
+- ye: Raw y end position (in pixel)
+- ampl: saccadic amplitude (degrees)
+- pv: peak velocity (degrees/sec)
+- start_uncorrected: Start time (in ms as recorded by EyeLink)
+- stop_uncorrected: End time (in ms as recorded by EyeLink)
+- blink_before: Whether a blink occured directly before the saccade
+- blink_after: Whether a blink occured directly after the saccade
+- blink: Whether a blink occured directly before or after the saccade
+- duration: Duration (in ms)
+- xe_minus_xs: Horizontal saccade distance
+- ye_minus_ys: Vertical saccade distance
+- eucledian_distance: Eucledian distance
+- angle: Angle
+- dX: Horizontal saccade amplitude
+- dY: Vertical saccade amplitude
+- ys_ALGORITHM_NAME: Corrected y start position (in pixel), i.e. after line assignment
+- ye_ALGORITHM_NAME: Corrected y end position (in pixel), i.e. after line assignment
+- ye_minus_ys_ALGORITHM_NAME: Vertical saccade distance after being snapped to line
+- angle_ALGORITHM_NAME: Vertical saccade distance after being snapped to line
+- lines_ALGORITHM_NAME: Starting line of saccade
+- linee_ALGORITHM_NAME: Landing line of saccade
+- line_word_s_ALGORITHM_NAME: Number of word on line from which saccade starts
+- line_word_e_ALGORITHM_NAME: Number of word on line where saccade ends
+- lets_ALGORITHM_NAME: Number of letter from which saccade starts
+- lete_ALGORITHM_NAME: Number of letter where saccade ends

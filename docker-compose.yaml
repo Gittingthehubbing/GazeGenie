@@ -1,0 +1,17 @@
+services:
+  dist_app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "8501:8501"
+    volumes:
+      - ./results:/app/results
+      - ./testfiles:/app/testfiles
+      - ./log_for_app.log:/app/log_for_app.log
+    environment:
+      - PYTHONUNBUFFERED=1
+
+volumes:
+  results:
+  testfiles:

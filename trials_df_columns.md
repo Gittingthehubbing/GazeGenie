@@ -1,0 +1,36 @@
+#### Column names for Trials Dataframe
+Some features were adapted from the popEye R package ([github](https://github.com/sascha2schroeder/popEye))
+The if the column depend on a line assignment then a _ALGORITHM_NAME will be at the end of the name.
+- subject: Subject name or ID (derived from filename)
+- trial_id: Trial ID
+- item: Item ID
+- condition: Condition (if applicable)
+- average_y_correction_ALGORITHM_NAME: Average difference between raw y position of a fixation and the center of the line to which it was assigned in pixels
+- Number of fixations before cleaning: Number of fixation found for the trial before any cleaning is done
+- Discard long fixations: Indicates if overly long fixations were discarded
+- Number of discarded long fixations: Number of fixations that were discarded due to being overly long
+- Number of discarded long fixations (%): Number of fixations that were discarded due to being overly long as a percentage of the total number of fixations
+- How short and close fixations were handled: Which option was chosen for handling short fixation
+- Number of merged fixations: Number of fixations that were merged due to their duration being below the set threshold and being in horizontal proximity to their preceeding or subsequent fixation
+- Number of merged fixations (%): Number of fixations that were merged due to their duration being below the set threshold and being in horizontal proximity to their preceeding or subsequent fixation as a percentage of the total number of fixations
+- Far out of text fixations were discarded: Whether fixations were discarded if they were far outside the stimulus text
+- Number of discarded far-out-of-text fixations: Number of fixations that were discarded due to being far outside the stimulus text
+- Number of discarded far-out-of-text fixations (%): Number of fixations that were discarded due to being far outside the stimulus text as a percentage of the total number of fixations
+- Total number of discarded and merged fixations: Number of fixations that were cleaned up
+- Total number of discarded and merged fixations (%): Number of fixations that were cleaned up as a percentage of the total number of fixations
+- trial_start_time: Timestamp of the start of the trial
+- trial_end_time: Timestamp of the end of the trial
+- question_correct: Whether the question associated with the trial was answered correctly. This will be blank if it could not be determined
+- number_of_words_in_trial: Total number of words in the stimulus used for the trial
+- blink: Number of blinks detected during the trial
+- nfix: Number of fixations remaining after cleaning
+- nrun_ALGORITHM_NAME: Number of runs on trial
+- saccade_length_ALGORITHM_NAME: Average saccade length across the trial
+- mean_fix_duration_ALGORITHM_NAME: Average fixation duration across the trial
+- total_fix_duration_ALGORITHM_NAME: Total fixation duration across the trial
+- skip_ALGORITHM_NAME: Proportion of words in the trial that have been skipped during first-pass reading
+- refix_ALGORITHM_NAME: Proportion of words in the trial that have been refixated
+- reg_ALGORITHM_NAME: Proportion of words which have been regressed into
+- firstpass_ALGORITHM_NAME: First-pass reading time
+- rereading_ALGORITHM_NAME: Re-reading time (total reading time minus first-pass reading time)
+- reading_rate_ALGORITHM_NAME: Reading rate (words per minute)

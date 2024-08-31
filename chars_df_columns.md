@@ -1,0 +1,24 @@
+#### Column names for Character Dataframe
+- subject: Subject name or ID (derived from filename)
+- trial_id: Trial ID
+- condition: Condition (if applicable)
+- item: Item ID
+- index: 
+- letternum: Number of the character
+- char: The character
+- char_xmin: x start position (in pixel)
+- char_ymin: y start position (in pixel)
+- char_xmax: x end position (in pixel)
+- char_ymax: y end position (in pixel)
+- char_y_center: x center position (in pixel)
+- char_x_center: y center position (in pixel)
+- assigned_line: Line of text the character belongs to
+- in_word_number: Number of word the character belongs to
+- in_word: Word the character belongs to
+- num_letters_from_start_of_word: Number of characters since the start of the word
+- in_sentence_number: Number of sentence the character belongs to
+- in_sentence: Sentence the character belongs to
+- letline: Character position from start of line
+- wordline: Word position from start of line for the word the character belongs to
+- wordsent: Word position from start of the sentence for the word the character belongs to
+- letword: Character position from start of word starting from space before word
