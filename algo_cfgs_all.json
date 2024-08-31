@@ -1,0 +1,51 @@
+{
+    "compare": {
+        "x_thresh": 512,
+        "n_nearest_lines": 3
+    },
+    "attach": {},
+    "segment": {},
+    "split": {},
+    "stretch": {
+        "stretch_bounds": [
+            0.9,
+            1.1
+        ],
+        "offset_bounds": [
+            -50,
+            50
+        ]
+    },
+    "slice": {
+            "x_thresh": 192,
+            "y_thresh": 32,
+            "w_thresh": 32,
+            "n_thresh": 90
+        
+    },
+    "warp": {},
+    "chain": {
+        "x_thresh": 192,
+        "y_thresh": 55
+    },
+    "regress": {
+        "slope_bounds": [
+            -0.1,
+            0.1
+        ],
+        "offset_bounds": [
+            -50,
+            50
+        ],
+        "std_bounds": [
+            1,
+            20
+        ]
+    },
+    "cluster": {},
+    "merge": {
+        "y_thresh": 32,
+        "gradient_thresh": 0.1,
+        "error_thresh": 20
+    }
+}
