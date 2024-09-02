@@ -25,6 +25,8 @@ import analysis_funcs as anf
 import models
 import popEye_funcs as pf
 from loss_functions import corn_label_from_logits
+import torch.multiprocessing
+torch.multiprocessing.set_sharing_strategy('file_system') # Needed to make multi proc not fail on linux
 
 ic.configureOutput(includeContext=True)
 
