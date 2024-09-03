@@ -12,7 +12,6 @@ eyekit_textblock.json
 log_for_app.log
 testfiles/ias_files/
 args.pkl
-asc_files.zip
 chars_df_alt.xlsx
 Computation_times_CD_win10_cpu_only.csv
 Computation_times_CD_win10_cpu_only_summary_in_minutes.csv
