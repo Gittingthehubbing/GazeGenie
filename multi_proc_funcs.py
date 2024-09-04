@@ -213,7 +213,7 @@ def remove_compile_from_dict(state_dict):
 
 def load_model(model_file, cfg):
     try:
-        model_loaded = t.load(model_file, map_location="cpu")
+        model_loaded = t.load(model_file, map_location="cpu", weights_only=True)
         if "hyper_parameters" in model_loaded.keys():
             model_cfg_temp = model_loaded["hyper_parameters"]["cfg"]
         else:
