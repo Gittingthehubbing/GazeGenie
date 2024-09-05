@@ -19,6 +19,7 @@ To restart container later:
 docker start -a gazegenie_app
 
 ## Local installation
+
 #### Install conda to get python
 
 https://github.com/conda-forge/miniforge/releases/latest/download/Miniforge3-Windows-x86_64.exe
@@ -26,12 +27,17 @@ https://github.com/conda-forge/miniforge/releases/latest/download/Miniforge3-Win
 #### Package installation in Terminal
 
 mamba create -n eye python=3.11 -y
+
 mamba activate eye
+
 mamba install conda-forge::cairo
+
 pip install -r requirements.txt
 
 #### Run program from Terminal
 
 conda activate eye 
+
 streamlit run app.py
+
 In Browser navigate to : http://localhost:8501 
