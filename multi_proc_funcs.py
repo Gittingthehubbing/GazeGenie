@@ -1847,6 +1847,38 @@ def logits_to_pred(out, y=None):
     return preds, y
 
 
+def _set_algo_outputs_to_nan(dffix, algo_choice):
+    dffix[f"line_num_{algo_choice}"] = np.nan
+    dffix[f"y_{algo_choice}"] = np.nan
+    dffix[f"y_{algo_choice}_correction"] = np.nan
+    return dffix
+
+
+def _init_trial_correction_status(trial):
+    status = trial.get("correction_status")
+    if not isinstance(status, dict):
+        status = {}
+    if "trial_level_reasons" not in status or not isinstance(status["trial_level_reasons"], list):
+        status["trial_level_reasons"] = []
+    if "algorithms" not in status or not isinstance(status["algorithms"], dict):
+        status["algorithms"] = {}
+    trial["correction_status"] = status
+    return status
+
+
+def _set_trial_skip_reason(trial, reason: str):
+    status = _init_trial_correction_status(trial)
+    status["trial_level_reasons"].append(str(reason))
+
+
+def _set_algorithm_status(trial, algo_choice: str, status_value: str, reason: str | None = None):
+    status = _init_trial_correction_status(trial)
+    algo_status = {"status": status_value}
+    if reason is not None:
+        algo_status["reason"] = str(reason)
+    status["algorithms"][algo_choice] = algo_status
+
+
 def get_DIST_preds(dffix, trial, models_dict):
     algo_choice = "DIST"
 
@@ -1856,7 +1888,26 @@ def get_DIST_preds(dffix, trial, models_dict):
 
     if "cpu" not in str(model.device):
         batch = [x.cuda() for x in batch]
+
+    seq_len = int(batch[0].shape[1])
+    max_seq_len = int(model.max_seq_length)
+    if seq_len > max_seq_len:
+        reason = (
+            f"Too many fixations for DIST: sequence length {seq_len} exceeds model limit {max_seq_len}. "
+            f"Try stronger cleaning or select a non-DIST algorithm for this trial."
+        )
+        LOGGER.warning(
+            "Skipping DIST for trial %s subject %s due to sequence length (%s > %s).",
+            trial.get("trial_id", "unknown"),
+            trial.get("subject", "unknown"),
+            seq_len,
+            max_seq_len,
+        )
+        _set_algorithm_status(trial, algo_choice, "failed", reason)
+        return _set_algo_outputs_to_nan(dffix, algo_choice)
+
     try:
+        assert not t.any(t.isnan(batch[0])), "NaNs found in batch tensor"
         out = model(batch)
         preds, y = logits_to_pred(out, y=None)
         if len(trial["y_char_unique"]) < 1:
@@ -1864,14 +1915,16 @@ def get_DIST_preds(dffix, trial, models_dict):
         else:
             y_char_unique = trial["y_char_unique"]
         num_lines = trial["num_char_lines"] - 1
-        preds = t.clamp(preds, 0, num_lines).squeeze().cpu().numpy()
+        preds = np.atleast_1d(t.clamp(preds, 0, num_lines).squeeze().cpu().numpy())
         y_pred_DIST = [y_char_unique[idx] for idx in preds]
 
         dffix[f"line_num_{algo_choice}"] = preds
         dffix[f"y_{algo_choice}"] = np.round(y_pred_DIST, decimals=0).astype(int).tolist()
         dffix[f"y_{algo_choice}_correction"] = (dffix.loc[:, f"y_{algo_choice}"] - dffix.loc[:, "y"]).round(2)
     except Exception as e:
-        ic(f"Exception on model(batch) for DIST \n{e}")
+        ic(f"Exception on model(batch) for DIST \n{e}. Trial id is {trial['trial_id']} subject is {trial.get('subject', 'unknown')}")
+        _set_algorithm_status(trial, algo_choice, "failed", f"DIST inference failed: {e}")
+        dffix = _set_algo_outputs_to_nan(dffix, algo_choice)
     return dffix
 
 
@@ -1887,19 +1940,43 @@ def get_DIST_ensemble_preds(
     loader_with_norm, dset_with_norm = prep_data_for_dist(model_cfg_with_norm_df, dffix, trial)
     batch_without_norm = next(iter(loader_without_norm))
     batch_with_norm = next(iter(loader_with_norm))
-    out = ensemble_model_avg((batch_without_norm, batch_with_norm))
-    preds, y = logits_to_pred(out[0]["out_avg"], y=None)
-    if len(trial["y_char_unique"]) < 1:
-        y_char_unique = pd.DataFrame(trial["chars_list"]).char_y_center.sort_values().unique()
-    else:
-        y_char_unique = trial["y_char_unique"]
-    num_lines = trial["num_char_lines"] - 1
-    preds = t.clamp(preds, 0, num_lines).squeeze().cpu().numpy()
-    y_pred_DIST = [y_char_unique[idx] for idx in preds]
+    seq_len = int(batch_without_norm[0].shape[1])
+    max_seq_len_cfg = model_cfg_without_norm_df.get("max_seq_length", None)
+    if max_seq_len_cfg is not None and seq_len > int(max_seq_len_cfg):
+        reason = (
+            f"Too many fixations for DIST-Ensemble: sequence length {seq_len} exceeds model limit {int(max_seq_len_cfg)}. "
+            f"Try stronger cleaning or select a non-DIST algorithm for this trial."
+        )
+        LOGGER.warning(
+            "Skipping DIST-Ensemble for trial %s subject %s due to sequence length (%s > %s).",
+            trial.get("trial_id", "unknown"),
+            trial.get("subject", "unknown"),
+            seq_len,
+            int(max_seq_len_cfg),
+        )
+        _set_algorithm_status(trial, algo_choice, "failed", reason)
+        return _set_algo_outputs_to_nan(dffix, algo_choice)
 
-    dffix[f"line_num_{algo_choice}"] = preds
-    dffix[f"y_{algo_choice}"] = np.round(y_pred_DIST, decimals=0).astype(int).tolist()
-    dffix[f"y_{algo_choice}_correction"] = (dffix.loc[:, f"y_{algo_choice}"] - dffix.loc[:, "y"]).round(1)
+    try:
+        out = ensemble_model_avg((batch_without_norm, batch_with_norm))
+        preds, y = logits_to_pred(out[0]["out_avg"], y=None)
+        if len(trial["y_char_unique"]) < 1:
+            y_char_unique = pd.DataFrame(trial["chars_list"]).char_y_center.sort_values().unique()
+        else:
+            y_char_unique = trial["y_char_unique"]
+        num_lines = trial["num_char_lines"] - 1
+        preds = np.atleast_1d(t.clamp(preds, 0, num_lines).squeeze().cpu().numpy())
+        y_pred_DIST = [y_char_unique[idx] for idx in preds]
+
+        dffix[f"line_num_{algo_choice}"] = preds
+        dffix[f"y_{algo_choice}"] = np.round(y_pred_DIST, decimals=0).astype(int).tolist()
+        dffix[f"y_{algo_choice}_correction"] = (dffix.loc[:, f"y_{algo_choice}"] - dffix.loc[:, "y"]).round(1)
+    except Exception as e:
+        ic(
+            f"Exception on model(batch) for DIST-Ensemble \n{e}. Trial id is {trial['trial_id']} subject is {trial.get('subject', 'unknown')}"
+        )
+        _set_algorithm_status(trial, algo_choice, "failed", f"DIST-Ensemble inference failed: {e}")
+        dffix = _set_algo_outputs_to_nan(dffix, algo_choice)
     return dffix
 
 
@@ -1944,14 +2021,28 @@ def apply_correction_algo(dffix, algo_choice, trial, models_dict, classic_algos_
     elif algo_choice == "Wisdom_of_Crowds_with_DIST":
         dffix, corrections = get_all_classic_preds(dffix, trial, classic_algos_cfg)
         dffix = get_DIST_preds(dffix, trial, models_dict=models_dict)
-        for _ in range(3):
-            corrections.append(np.asarray(dffix.loc[:, "y_DIST"]))
+        if "y_DIST" in dffix.columns and not dffix["y_DIST"].isna().all():
+            for _ in range(3):
+                corrections.append(np.asarray(dffix.loc[:, "y_DIST"]))
+        else:
+            LOGGER.warning(
+                "DIST failed for trial %s subject %s; proceeding with classic-only WOC fallback.",
+                trial.get("trial_id", "unknown"),
+                trial.get("subject", "unknown"),
+            )
         dffix = apply_woc(dffix, trial, corrections, algo_choice)
     elif algo_choice == "Wisdom_of_Crowds_with_DIST_Ensemble":
         dffix, corrections = get_all_classic_preds(dffix, trial, classic_algos_cfg)
         dffix = get_EDIST_preds_with_model_check(dffix, trial, models_dict=models_dict)
-        for _ in range(3):
-            corrections.append(np.asarray(dffix.loc[:, "y_DIST-Ensemble"]))
+        if "y_DIST-Ensemble" in dffix.columns and not dffix["y_DIST-Ensemble"].isna().all():
+            for _ in range(3):
+                corrections.append(np.asarray(dffix.loc[:, "y_DIST-Ensemble"]))
+        else:
+            LOGGER.warning(
+                "DIST-Ensemble failed for trial %s subject %s; proceeding with classic-only WOC fallback.",
+                trial.get("trial_id", "unknown"),
+                trial.get("subject", "unknown"),
+            )
         dffix = apply_woc(dffix, trial, corrections, algo_choice)
     elif algo_choice == "Wisdom_of_Crowds":
         dffix, corrections = get_all_classic_preds(dffix, trial, classic_algos_cfg)
@@ -2230,10 +2321,44 @@ def correct_df(
         own_word_measures_dfs_for_algo = []
     own_sentence_measures_dfs_for_algo = []
     trial["average_y_corrections"] = []
-    for algoIdx in stqdm(repeats, desc="Applying line-assignment algorithms"):
+    successful_algorithms = 0
+    for algoIdx in repeats:
         algo_choice = algo_choices[algoIdx]
         dffix = apply_correction_algo(dffix, algo_choice, trial, models_dict, classic_algos_cfg)
-        average_y_correction = (dffix[f"y_{algo_choice}"] - dffix["y"]).mean().round(1)
+        y_col = f"y_{algo_choice}"
+        if y_col not in dffix.columns:
+            _set_algorithm_status(trial, algo_choice, "failed", "Expected corrected y column missing after correction")
+            raise AssertionError(
+                f"Expected column '{y_col}' not found in dffix after applying correction algorithm. "
+                f"Correction probably failed. Available columns in dffix: {dffix.columns}. "
+                f"Trial id is {trial['trial_id']} subject is {trial.get('subject', 'unknown')}"
+            )
+
+        if dffix[y_col].isna().all():
+            existing_algo_status = trial.get("correction_status", {}).get("algorithms", {}).get(algo_choice, {})
+            if not (
+                isinstance(existing_algo_status, dict)
+                and existing_algo_status.get("status") == "failed"
+                and existing_algo_status.get("reason")
+            ):
+                _set_algorithm_status(
+                    trial,
+                    algo_choice,
+                    "skipped",
+                    "All corrected y values are NaN for this algorithm",
+                )
+            LOGGER.warning(
+                "Skipping downstream processing for algorithm %s because all corrected y values are NaN. Trial id: %s subject: %s",
+                algo_choice,
+                trial.get("trial_id", "unknown"),
+                trial.get("subject", "unknown"),
+            )
+            trial["average_y_corrections"].append({"Algorithm": algo_choice, "average_y_correction": np.nan})
+            continue
+
+        _set_algorithm_status(trial, algo_choice, "applied")
+        successful_algorithms += 1
+        average_y_correction = (dffix[y_col] - dffix["y"]).mean().round(1)
         trial["average_y_corrections"].append({"Algorithm": algo_choice, "average_y_correction": average_y_correction})
         fig, desired_width_in_pixels, desired_height_in_pixels = matplotlib_plot_df(
             dffix,
@@ -2269,6 +2394,9 @@ def correct_df(
             if sent_measures_to_calc_multi:
                 sent_measures_multi = pf.compute_sentence_measures(dffix, chars_df, algo_choice, sent_measures_to_calc_multi)
                 own_sentence_measures_dfs_for_algo.append(sent_measures_multi)
+
+    if successful_algorithms == 0:
+        _set_trial_skip_reason(trial, "No correction algorithm produced valid corrected y values.")
 
     if for_multi and len(own_word_measures_dfs_for_algo) > 0:
         words_df = (
@@ -2441,6 +2569,10 @@ def process_trial_choice(
             fig.savefig(RESULTS_FOLDER / f"{subject_for_name}_{trial_id_for_name}_saccades.png")
             plt.close(fig)
         else:
+            _set_trial_skip_reason(
+                trial,
+                f"Only {dffix.shape[0]} fixation(s) remained after cleaning; minimum of 2 required for correction.",
+            )
             ic(
                 f"🚨 Only {dffix.shape[0]} fixation left after processing. saccade_df not created for trial {trial['trial_id']} 🚨"
             )

@@ -1,13 +1,14 @@
 import os
 import traceback
 from datetime import datetime
+import hashlib
 if os.name == 'posix' and os.uname().sysname == "Darwin" and os.path.exists("/opt/homebrew/lib"):
     # Fix for macOS https://github.com/Kozea/CairoSVG/issues/354#issuecomment-1072905204
     from ctypes.macholib import dyld
     dyld.DEFAULT_LIBRARY_FALLBACK.append("/opt/homebrew/lib")
 import subprocess
 import copy
-from io import StringIO
+from io import StringIO, BytesIO
 import streamlit as st
 from streamlit.errors import StreamlitSecretNotFoundError
 import pandas as pd
@@ -30,6 +31,8 @@ from matplotlib import font_manager
 import os
 import multiprocessing
 import torch
+import lovely_tensors as lt
+lt.monkey_patch()
 
 try:
     from create_interest_areas_from_image import recognize_text
@@ -105,6 +108,54 @@ UNZIPPED_FOLDER = pl.Path("unzipped")
 
 TEMP_FIGURE_STIMULUS_PATH = PLOTS_FOLDER.joinpath("temp_matplotlib_plot_stimulus.png")
 ut.make_folders(RESULTS_FOLDER, UNZIPPED_FOLDER, PLOTS_FOLDER)
+OCR_CACHE_FOLDER = RESULTS_FOLDER.joinpath("ocr_cache")
+OCR_CACHE_FOLDER.mkdir(parents=True, exist_ok=True)
+
+
+def _read_image_bytes(image_obj) -> bytes:
+    if hasattr(image_obj, "getvalue"):
+        image_bytes = image_obj.getvalue()
+    elif isinstance(image_obj, (str, pl.Path)):
+        image_bytes = pl.Path(image_obj).read_bytes()
+    elif hasattr(image_obj, "read"):
+        previous_pos = image_obj.tell() if hasattr(image_obj, "tell") else None
+        if hasattr(image_obj, "seek"):
+            image_obj.seek(0)
+        image_bytes = image_obj.read()
+        if previous_pos is not None and hasattr(image_obj, "seek"):
+            image_obj.seek(previous_pos)
+    else:
+        raise TypeError(f"Unsupported image object type for OCR: {type(image_obj)}")
+
+    if hasattr(image_obj, "seek"):
+        image_obj.seek(0)
+
+    if not isinstance(image_bytes, (bytes, bytearray)):
+        raise ValueError("Could not read image as bytes for OCR caching")
+    return bytes(image_bytes)
+
+
+def get_cached_or_run_ocr(image_obj, *, image_name: str | None = None, trial_label: str | None = None) -> pd.DataFrame:
+    image_bytes = _read_image_bytes(image_obj)
+    image_hash = hashlib.sha256(image_bytes).hexdigest()
+    cache_file = OCR_CACHE_FOLDER.joinpath(f"{image_hash}.csv")
+
+    if cache_file.exists():
+        stim_df_raw = pd.read_csv(cache_file)
+        st.session_state["logger"].info(
+            f"OCR cache hit for {trial_label or image_name or image_hash[:12]} ({cache_file.name})"
+        )
+        return stim_df_raw
+
+    start_time_ocr = time.time()
+    image_stream = BytesIO(image_bytes)
+    image_stream.name = image_name or getattr(image_obj, "name", f"{image_hash}.png")
+    stim_df_raw = recognize_text(image_stream)
+    stim_df_raw.to_csv(cache_file, index=False)
+    st.session_state["logger"].info(
+        f"OCR cache miss for {trial_label or image_stream.name}; computed in {time.time() - start_time_ocr:.2f}s and cached to {cache_file.name}"
+    )
+    return stim_df_raw
 
 
 def handle_single_csv_analysis_selection(algo_choice: str | None) -> bool:
@@ -401,6 +452,26 @@ def in_st_nn(name):
         return True
     else:
         return False
+
+
+def get_trial_skip_reason(trial: dict, default_reason: str) -> str:
+    status = trial.get("correction_status", {}) if isinstance(trial, dict) else {}
+    trial_reasons = status.get("trial_level_reasons", []) if isinstance(status, dict) else []
+    algo_status = status.get("algorithms", {}) if isinstance(status, dict) else {}
+    algo_reasons = []
+    if isinstance(algo_status, dict):
+        for algo_name, info in algo_status.items():
+            if not isinstance(info, dict):
+                continue
+            if info.get("status") in {"failed", "skipped"}:
+                reason = info.get("reason")
+                if reason:
+                    algo_reasons.append(f"{algo_name}: {reason}")
+
+    reasons = [r for r in [*trial_reasons, *algo_reasons] if isinstance(r, str) and len(r) > 0]
+    if len(reasons) == 0:
+        return default_reason
+    return f"{default_reason} Reason: {' | '.join(reasons)}"
 
 
 @st.cache_resource
@@ -783,7 +854,7 @@ def process_all_asc_files(
                     models_dict = get_cached_models(DIST_MODELS_FOLDER)
                 dffixs = []
                 trials = []
-                for trial_id, trial in stqdm(trials_by_ids.items(), desc=f"\nProcessing trials in {asc_file_stem}"):
+                for trial_id, trial in stqdm(trials_by_ids.items(), desc=f"Processing trials in {asc_file_stem}"):
                     dffix, trial = process_trial_choice(
                         trial,
                         algo_choice_multi_asc,
@@ -810,11 +881,16 @@ def process_all_asc_files(
                 out = zip(dffixs, trials)
             for dffix, trial in stqdm(out, desc=f"Aggregating results for file {asc_file_stem}"):
                 if dffix.shape[0] < 2:
+                    trial_id_for_msg = trial.get("trial_id", "unknown") if isinstance(trial, dict) else "unknown"
+                    base_reason = (
+                        f"trial {trial_id_for_msg} for file {asc_file_stem} failed because fixation dataframe only had {dffix.shape[0]} fixation after processing."
+                    )
+                    full_reason = get_trial_skip_reason(trial, base_reason)
                     st.warning(
-                        f"trial {trial_id} for file {asc_file_stem} failed because fixation dataframe only had {dffix.shape[0]} fixation after processing."
+                        full_reason
                     )
                     st.session_state["logger"].warning(
-                        f"trial {trial_id} for file {asc_file_stem} failed because fixation dataframe only had {dffix.shape[0]} fixation after processing."
+                        full_reason
                     )
                     continue
                 fix_cols_to_keep = [
@@ -1177,7 +1253,11 @@ def process_all_csv_files(
                 image_obj.seek(0)
 
             try:
-                stim_df_raw = recognize_text(image_obj)
+                stim_df_raw = get_cached_or_run_ocr(
+                    image_obj,
+                    image_name=getattr(image_obj, "name", f"{trial_id_str}.png"),
+                    trial_label=f"{csv_file_stem}:{subject_str}:{trial_id_str}",
+                )
                 stim_df_raw.to_csv(RESULTS_FOLDER / f"{trial_id_str}_stimdf_from_OCR.csv")
                 stim_df = prepare_stimulus_dataframe_for_multi_csv(stim_df_raw, trial_id_str)
             except ValueError as err:
@@ -1231,6 +1311,7 @@ def process_all_csv_files(
                 trial["condition"] = None
 
             trial["dffix"] = subdf.copy()
+            start_time_clean = time.time()
             dffix_cleaned, trial = clean_dffix_own(
                 trial,
                 choice_handle_short_and_close_fix,
@@ -1244,13 +1325,21 @@ def process_all_csv_files(
                 discard_blinks,
                 subdf.copy(),
             )
+            st.session_state["logger"].info(f"Cleaning for {trial_id_str} took {time.time() - start_time_clean:.2f}s")
 
-            if dffix_cleaned.empty:
+            if dffix_cleaned.shape[0] < 2:
+                trial.setdefault("correction_status", {}).setdefault("trial_level_reasons", []).append(
+                    f"Only {dffix_cleaned.shape[0]} fixation(s) remained after cleaning; minimum of 2 required for correction."
+                )
+                base_reason = (
+                    f"trial {trial_id_str} for file {csv_file_stem} and subject {trial.get('subject', 'unknown')} discarded because fewer than 2 fixations remained after cleaning ({dffix_cleaned.shape[0]})."
+                )
+                full_reason = get_trial_skip_reason(trial, base_reason)
                 st.warning(
-                    f"trial {trial_id_str} for file {csv_file_stem} discarded because no fixations remained after cleaning."
+                    full_reason
                 )
                 st.session_state["logger"].warning(
-                    f"trial {trial_id_str} for file {csv_file_stem} had empty fixation dataframe after cleaning"
+                    full_reason
                 )
                 continue
 
@@ -1268,6 +1357,7 @@ def process_all_csv_files(
             dffix_cleaned = dffix_cleaned.loc[:, fix_cols_to_keep].copy()
 
             try:
+                start_time_corr = time.time()
                 dffix_corrected = correct_df(
                     dffix_cleaned,
                     algo_choice_multi_csv,
@@ -1281,12 +1371,34 @@ def process_all_csv_files(
                     sent_measures_to_calc_multi=sent_measures_to_calculate_multi_csv,
                     fix_cols_to_add=fix_cols_to_add_multi_csv,
                 )
+                st.session_state["logger"].info(f"Correction for subject {trial.get('subject', 'unknown')} and trial {trial_id_str} took {time.time() - start_time_corr:.2f}s")
             except Exception as err:
                 st.session_state["logger"].warning(
-                    f"Correction failed for {trial_id_str} in {csv_file_stem}: {err}", exc_info=True
+                    f"Correction failed for subject {trial.get('subject', 'unknown')} and trial {trial_id_str} in {csv_file_stem}: {err}", exc_info=True
                 )
-                st.warning(f"Correction failed for trial {trial_id_str}. See log for details.")
+                st.warning(f"Correction failed for subject {trial.get('subject', 'unknown')} and trial {trial_id_str}. Skipping. See log for details.")
                 continue
+
+            requested_algos = algo_choice_multi_csv if isinstance(algo_choice_multi_csv, list) else [algo_choice_multi_csv]
+            requested_algos = [algo for algo in requested_algos if algo]
+            valid_algos = [
+                algo
+                for algo in requested_algos
+                if (f"y_{algo}" in dffix_corrected.columns and not dffix_corrected[f"y_{algo}"].isna().all())
+            ]
+            if len(requested_algos) > 0 and len(valid_algos) == 0:
+                base_reason = (
+                    f"Skipping subject {subject_str} trial {trial_id_str} because no selected algorithm produced valid corrected y values."
+                )
+                full_reason = get_trial_skip_reason(trial, base_reason)
+                st.warning(full_reason)
+                st.session_state["logger"].warning(full_reason)
+                continue
+            if len(valid_algos) < len(requested_algos):
+                skipped_algos = [algo for algo in requested_algos if algo not in valid_algos]
+                st.warning(
+                    f"Subject {subject_str} trial {trial_id_str}: some algorithms were skipped ({', '.join(skipped_algos)})."
+                )
 
             trial["dffix"] = dffix_corrected.copy()
             saccade_df_dict = trial.get("saccade_df", {})
@@ -1338,6 +1450,7 @@ def process_all_csv_files(
                 all_sentence_dfs_list.append(sent_measures_multi.copy())
 
             if save_files_for_each_trial_individually:
+                start_time_save = time.time()
                 savename = RESULTS_FOLDER.joinpath(csv_file_stem)
                 csv_name = f"{savename}_{trial_id_str}_fixations_df.csv"
                 csv_name = export_dataframe(dffix_corrected.copy(), csv_name)
@@ -1348,6 +1461,7 @@ def process_all_csv_files(
                 csv_name = f"{savename}_{trial_id_str}_stimulus_df.csv"
                 export_dataframe(chars_df.copy(), csv_name)
                 ut.save_trial_to_json(trial_for_comb, RESULTS_FOLDER.joinpath(f"{csv_file_stem}_{trial_id_str}.json"))
+                st.session_state["logger"].info(f"Saving files for {trial_id_str} took {time.time() - start_time_save:.2f}s")
 
             trials_by_ids[trial_id_str] = trial
             num_trials_in_file += 1
@@ -1361,9 +1475,12 @@ def process_all_csv_files(
 
         if os.path.exists(RESULTS_FOLDER.joinpath(f"{csv_file_stem}.zip")):
             os.remove(RESULTS_FOLDER.joinpath(f"{csv_file_stem}.zip"))
+        
+        start_time_zip = time.time()
         save_to_zips(RESULTS_FOLDER, f"*{csv_file_stem}*.csv", f"{csv_file_stem}.zip", delete_after_zip=True)
         save_to_zips(RESULTS_FOLDER, f"*{csv_file_stem}*.json", f"{csv_file_stem}.zip", delete_after_zip=True)
         save_to_zips(RESULTS_FOLDER, f"*{csv_file_stem}*.png", f"{csv_file_stem}.zip", delete_after_zip=True)
+        st.session_state["logger"].info(f"Zipping {csv_file_stem} took {time.time() - start_time_zip:.2f}s")
         zipfiles_with_results += [str(x) for x in RESULTS_FOLDER.glob(f"{csv_file_stem}*.zip")]
 
     if len(all_fix_dfs_list) == 0:
@@ -2934,7 +3051,11 @@ def main():
                 st.session_state["stimdf_single_csv"] = trial
                 colnames_stim = list(st.session_state["stimdf_single_csv"].keys())
             elif any([".png" in single_csv_stim_file.name, ".jpeg" in single_csv_stim_file.name]):
-                stimdf_single_csv = recognize_text(single_csv_stim_file)
+                stimdf_single_csv = get_cached_or_run_ocr(
+                    single_csv_stim_file,
+                    image_name=single_csv_stim_file.name,
+                    trial_label=f"single_csv:{single_csv_stim_file.name}",
+                )
                 stimdf_single_csv.to_csv(RESULTS_FOLDER / f"{single_csv_stim_file.name}_stimdf_single_from_OCR.csv")
                 if 'trial_id' in stimdf_single_csv.columns:
                     stimdf_single_csv['trial_id'] = stimdf_single_csv['trial_id'].astype(str)
@@ -3748,6 +3869,8 @@ def main():
                 for k_outer, v_outer in all_trials_by_subj.items()
             }
             subs_str = "-".join([s for s in all_trials_by_subj.keys()])
+            if len(subs_str) > 100:
+                subs_str = subs_str[:100] + "_etc"
             st.session_state["trials_df"] = trials_quick_meta_df.drop_duplicates().dropna(subset="text", axis=0)
             st.session_state["trials_df"].to_csv(RESULTS_FOLDER / f"{subs_str}_comb_items_lines_text.csv")
             if "text_with_newlines" in st.session_state["trials_df"].columns:
@@ -3818,6 +3941,8 @@ def main():
             )
             multi_file_tab.dataframe(high_fix_count_dfs_cat, width='stretch', height=200)
             subs_str = "-".join([s for s in st.session_state["all_trials_by_subj"].keys()])
+            if len(subs_str) > 100:
+                subs_str = subs_str[:100] + "_etc"
             high_fix_count_dfs_cat.to_csv(RESULTS_FOLDER / f"{subs_str}_words_with_many_fixations.csv")
 
         if "all_correction_stats" in st.session_state:
@@ -4103,7 +4228,9 @@ def main():
                 }
                 for k_outer, v_outer in all_trials_by_subj_csv.items()
             }
-            subs_str_csv = "-".join([s for s in all_trials_by_subj_csv.keys()])
+            subs_str_csv = ("-".join([s for s in all_trials_by_subj_csv.keys()]))
+            if len(subs_str_csv) > 100:
+                subs_str_csv = subs_str_csv[:100] + "_etc"
             st.session_state["trials_df_csv"] = trials_quick_meta_df_csv.drop_duplicates().dropna(subset="text", axis=0)
             st.session_state["trials_df_csv"].to_csv(RESULTS_FOLDER / f"{subs_str_csv}_comb_items_lines_text.csv")
             if "text_with_newlines" in st.session_state["trials_df_csv"].columns:

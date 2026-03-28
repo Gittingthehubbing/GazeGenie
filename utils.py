@@ -598,7 +598,7 @@ def asc_lines_to_trials_by_trail_id(
     ias_file = ""
     trial_var_block_lines_list = []
     if "\n".join(map(str.strip, lines)).find("TRIAL_VAR") != -1:
-        for idx, l in enumerate(tqdm(lines, desc=f"Checking for TRIAL_VAR lines for {filename}")):
+        for idx, l in enumerate(lines):
             if trial_var_block_start_idx == -1 and "MSG" not in l:
                 continue
             if "TRIAL_VAR" in l:

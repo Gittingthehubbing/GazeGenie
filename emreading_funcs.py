@@ -878,10 +878,10 @@ def word_measures_EM(data, algo_choice, include_time_stamps=False):
         required_columns = ["blink", "prev_blink", "after_blink"]
         if all(col in data.columns for col in required_columns):
             if (data["blink"] + data["prev_blink"] + data["after_blink"]).sum() == 0:
-                ic("Blinks appear to be already excluded! \n\n")
+                ic("Blinks appear to be already excluded!")
             else:
                 add_blanks = True
-                ic("There appears to be valid blink data! We will map blinks to individual words. \n\n")
+                ic("There appears to be valid blink data! We will map blinks to individual words.")
 
                 regress_blinks = data[data["blink"] == 1 & ~data["regress_EM"].isna()].index
 
@@ -891,9 +891,9 @@ def word_measures_EM(data, algo_choice, include_time_stamps=False):
                         "Fixation type is not mapped for observations with blinks. Therefore, blinks can't be mapped in terms of 1st and 2nd pass reading."
                     )
                     ic(
-                        "Please note that, by default, blink fixation durations will also not be added to fixation duration measures for that word since it's assumed you will delete this word from analysis.\n"
+                        "Please note that, by default, blink fixation durations will also not be added to fixation duration measures for that word since it's assumed you will delete this word from analysis."
                     )
-                    ic("If you need to change this, see settings in the pre-processing function.\n\n")
+                    ic("If you need to change this, see settings in the pre-processing function.")
 
     data_n = pd.DataFrame()
 
